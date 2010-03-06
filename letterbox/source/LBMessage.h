@@ -8,6 +8,7 @@
 
 #import <Cocoa/Cocoa.h>
 
+@class LBMIMEMultipartMessage;
 
 @interface LBMessage : NSObject {
     
@@ -25,6 +26,7 @@
 @property (retain) NSURL *messageURL;
 @property (retain) NSDate *receivedDate;
 @property (retain) NSDate *sendDate;
+@property (retain) LBMIMEMultipartMessage *mimePart;
 
 - (void) parseHeaders;
 

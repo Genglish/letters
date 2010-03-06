@@ -190,9 +190,9 @@
 				CCA554361106DE1300CEEFF4 /* LADocument.m */,
 				CCA554521106E1BE00CEEFF4 /* LAMailViewController.h */,
 				CCA554531106E1BE00CEEFF4 /* LAMailViewController.m */,
-				AAB346E911115F0A00C270B4 /* Prefs */,
 				CC220D6511309A92000B46D8 /* LAMessageListView.h */,
 				CC220D6611309A92000B46D8 /* LAMessageListView.m */,
+				AAB346E911115F0A00C270B4 /* Prefs */,
 			);
 			name = Classes;
 			sourceTree = "<group>";

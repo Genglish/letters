@@ -11,7 +11,6 @@
 #import "LADocument.h"
 
 
-
 @interface LAMailViewController ()
 - (NSString *)selectedFolderPath;
 @end
@@ -155,7 +154,6 @@
             message = [LAPrefs boolForKey:@"chocklock"] ? [message uppercaseString] : message;
             
             [[[messageTextView textStorage] mutableString] setString:message];
-            
         }
     }
     
