@@ -17,8 +17,11 @@
     
 }
 
-@property (retain) NSString *uuid;
+@property (retain) NSString *localUUID;
+@property (retain) NSString *serverUID;
 @property (retain) NSString *messageId;
+@property (retain) NSString *inReplyTo;
+@property (retain) NSString *mailbox;
 @property (retain) NSString *subject;
 @property (retain) NSString *sender;
 @property (retain) NSString *to;
@@ -27,6 +30,13 @@
 @property (retain) NSDate *receivedDate;
 @property (retain) NSDate *sendDate;
 @property (retain) LBMIMEMultipartMessage *mimePart;
+
+@property (assign) BOOL seenFlag;
+@property (assign) BOOL answeredFlag;
+@property (assign) BOOL flaggedFlag;
+@property (assign) BOOL deletedFlag;
+@property (assign) BOOL draftFlag;
+@property (retain) NSString *flags;
 
 - (void) parseHeaders;
 

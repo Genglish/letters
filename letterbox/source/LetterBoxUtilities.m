@@ -30,7 +30,13 @@
  */
 
 #import "LetterBoxUtilities.h"
+#import "LBAddress.h"
 #import "JRLog.h"
+#import "LBEnvelopeTokenizer.h"
+#import "TDToken.h"
+#import "TDWhitespaceState.h"
+#import "TDCommentState.h"
+#import "LBNSStringAdditions.h"
 
 /* direction is 1 for send, 0 for receive, -1 when it does not apply */
 void letterbox_logger(int direction, const char * str, size_t size) {
@@ -204,4 +210,208 @@ NSString* LBUUIDString(void) {
     [uuidString autorelease];
     return [uuidString lowercaseString];
 }
+
+
+/*
+http://tools.ietf.org/html/rfc3501#section-7.4.2
+
+    ENVELOPE
+         A parenthesized list that describes the envelope structure of a
+         message.  This is computed by the server by parsing the
+         [RFC-2822] header into the component parts, defaulting various
+         fields as necessary.
+
+         The fields of the envelope structure are in the following
+         order: date, subject, from, sender, reply-to, to, cc, bcc,
+         in-reply-to, and message-id.  The date, subject, in-reply-to,
+         and message-id fields are strings.  The from, sender, reply-to,
+         to, cc, and bcc fields are parenthesized lists of address
+         structures.
+
+         An address structure is a parenthesized list that describes an
+         electronic mail address.  The fields of an address structure
+         are in the following order: personal name, [SMTP]
+         at-domain-list (source route), mailbox name, and host name.
+
+         [RFC-2822] group syntax is indicated by a special form of
+         address structure in which the host name field is NIL.  If the
+         mailbox name field is also NIL, this is an end of group marker
+         (semi-colon in RFC 822 syntax).  If the mailbox name field is
+         non-NIL, this is a start of group marker, and the mailbox name
+         field holds the group name phrase.
+
+         If the Date, Subject, In-Reply-To, and Message-ID header lines
+         are absent in the [RFC-2822] header, the corresponding member
+         of the envelope is NIL; if these header lines are present but
+         empty the corresponding member of the envelope is the empty
+         string.
+         
+            Note: some servers may return a NIL envelope member in the
+            "present but empty" case.  Clients SHOULD treat NIL and
+            empty string as identical.
+
+            Note: [RFC-2822] requires that all messages have a valid
+            Date header.  Therefore, the date member in the envelope can
+            not be NIL or the empty string.
+
+            Note: [RFC-2822] requires that the In-Reply-To and
+            Message-ID headers, if present, have non-empty content.
+            Therefore, the in-reply-to and message-id members in the
+            envelope can not be the empty string.
+
+         If the From, To, cc, and bcc header lines are absent in the
+         [RFC-2822] header, or are present but empty, the corresponding
+         member of the envelope is NIL.
+
+         If the Sender or Reply-To lines are absent in the [RFC-2822]
+         header, or are present but empty, the server sets the
+         corresponding member of the envelope to be the same value as
+         the from member (the client is not expected to know to do
+         this).
+
+            Note: [RFC-2822] requires that all messages have a valid
+            From header.  Therefore, the from, sender, and reply-to
+            members in the envelope can not be NIL.
+*/
+
+
+
+NSDictionary* LBParseSimpleFetchResponse(NSString *fetchResponse) {
+    // http://tools.ietf.org/html/rfc3501#section-6.4.5
+    
+    // this guy has to be an untagged response, right?
+    if (![fetchResponse hasPrefix:@"*"]) {
+        return nil;
+    }
+    
+    // * 1 FETCH (FLAGS (\\Seen $NotJunk NotJunk) INTERNALDATE \"29-Jan-2010 21:44:05 -0800\" RFC822.SIZE 15650 ENVELOPE (\"Wed, 27 Jan 2010 22:51:51 +0000\" \"Re: Coding Style Guidelines\" ((\"Bob Smith\" NIL \"bobsmith\" \"gmail.com\")) ((\"Bob Smith\" NIL \"bobsmith\" \"gmail.com\")) ((\"Bob Smith\" NIL \"bobsmith\" \"gmail.com\")) ((\"Gus Mueller\" NIL \"gus\" \"lettersapp.com\")) NIL NIL \"<4CE4C6F7-A466-4060-8FC6-4FEF66C6B906lettersapp.com>\" \"<8f5c05b71001271451j72710a29ia54773d3r743182c@mail.gmail.com>\") UID 98656
+    
+    NSMutableDictionary *d = [NSMutableDictionary dictionary];
+    
+    
+    LBEnvelopeTokenizer *tokenizer  = [LBEnvelopeTokenizer tokenizerWithString:fetchResponse];
+    
+    //tokenizer.whitespaceState.reportsWhitespaceTokens = YES;
+    
+    TDToken *eof                    = [TDToken EOFToken];
+    TDToken *tok                    = 0x00;
+    while ((tok = [tokenizer nextToken]) != eof) {
+        
+        NSString *tokS = [tok stringValue];
+        
+        if ([tokS isEqualToString:@"FLAGS"]) {
+            
+            NSMutableString *flags = [NSMutableString string];
+            // should be a '(', so we skip over that.
+            [tokenizer nextToken];
+            
+            tokenizer.whitespaceState.reportsWhitespaceTokens = YES;
+            while (((tok = [tokenizer nextToken]) != eof) && ![[tok stringValue] isEqualToString:@")"]) {
+                [flags appendString:[tok stringValue]];
+            }
+            tokenizer.whitespaceState.reportsWhitespaceTokens = NO;
+            
+            [d setObject:flags forKey:tokS];
+        }
+        else if ([tokS isEqualToString:@"INTERNALDATE"] || [tokS isEqualToString:@".SIZE"] || [tokS isEqualToString:@"UID"]) {
+            
+            NSString *val = [[tokenizer nextToken] stringValue];
+            
+            val = [val stringByDeletingEndQuotes];
+            
+            if ([tokS isEqualToString:@".SIZE"]) {
+                #warning seems to be a shortcoming of the parsing kit, that we can't ge a . to be a word.  Fix?
+                tokS = @"RFC822.SIZE"; // seems to be a shortcoming of the parsing kit, that we can't ge a . to be a word.
+            }
+            
+            [d setObject:val forKey:tokS];
+        }
+        else if ([tokS isEqualToString:@"ENVELOPE"]) {
+            
+            NSArray *tokenSections = [NSArray arrayWithObjects:@"from", @"sender", @"reply-to", @"to", @"cc", @"bcc", nil];
+            
+            // should be the opening (
+            if (![[[tokenizer nextToken] stringValue] isEqualToString:@"("]) {
+                return nil;
+            }
+            
+            // alrighty, date, then subject
+            NSString *val = [[tokenizer nextToken] stringValue];
+            
+            if ([val hasPrefix:@"\""] && [val hasSuffix:@"\""]) {
+                val = [val substringWithRange:NSMakeRange(1, [val length] - 2)];
+                [d setObject:val forKey:@"date"];
+            }
+            
+            val = [[tokenizer nextToken] stringValue];
+            if ([val hasPrefix:@"\""] && [val hasSuffix:@"\""]) {
+                val = [val substringWithRange:NSMakeRange(1, [val length] - 2)];
+                [d setObject:val forKey:@"subject"];
+            }
+            
+            
+            // time to parse the addresses
+            for (NSString *tokSect in tokenSections) {
+                
+                tokS = [[tokenizer nextToken] stringValue];
+                
+                if ([tokS isEqualToString:@"NIL"]) {
+                    continue;
+                }
+                
+                if (![tokS isEqualToString:@"("]) {
+                    NSLog(@"No opening (! (got '%@')", tokS);
+                    return nil;
+                }
+                
+                NSMutableArray *addrs = [NSMutableArray array];
+                
+                [d setObject:addrs forKey:tokSect];
+                
+                while (YES) {
+                    
+                    if (![[[tokenizer nextToken] stringValue] isEqualToString:@"("]) {
+                        break;
+                    }
+                    
+                    NSString *personalName = [[tokenizer nextToken] stringValue];
+                    NSString *sourceRoute  = [[tokenizer nextToken] stringValue];
+                    NSString *mailboxName  = [[tokenizer nextToken] stringValue];
+                    NSString *hostName     = [[tokenizer nextToken] stringValue];
+                    [tokenizer nextToken]; // get rid of the )
+                    
+                    (void)sourceRoute;
+                    
+                    if ([personalName isEqualToString:@""] || [personalName isEqualToString:@"NIL"]) {
+                        personalName = nil;
+                    }
+                    
+                    LBAddress *addr = [LBAddress addressWithName:[personalName stringByDeletingEndQuotes]
+                                                           email:[NSString stringWithFormat:@"%@@%@", [mailboxName stringByDeletingEndQuotes], [hostName stringByDeletingEndQuotes]]];
+                    
+                    [addrs addObject:addr];
+                }
+            }
+            
+            NSString *inReply   = [[tokenizer nextToken] stringValue];
+            NSString *messageId = [[tokenizer nextToken] stringValue];
+            
+            [d setObject:[inReply stringByDeletingEndQuotes] forKey:@"in-reply-to"];
+            [d setObject:[messageId stringByDeletingEndQuotes] forKey:@"message-id"];
+            
+            // finish off the )
+            [tokenizer nextToken];
+            
+            // in-reply-to, and message-id
+        }
+    }
+    
+    return d;
+}
+
+
+
+
+
+
 

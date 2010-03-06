@@ -7,20 +7,33 @@
 //
 
 #import "LBMessage.h"
+#import "LetterBoxUtilities.h"
 
 #import "LBMIMEParser.h"
 
 @implementation LBMessage
 
-@synthesize uuid;
+
+@synthesize localUUID;
+@synthesize serverUID;
 @synthesize messageId;
-@synthesize messageURL;
+@synthesize inReplyTo;
+@synthesize mailbox;
 @synthesize subject;
 @synthesize sender;
 @synthesize to;
+@synthesize messageBody;
+@synthesize messageURL;
 @synthesize receivedDate;
 @synthesize sendDate;
 @synthesize mimePart;
+
+@synthesize seenFlag;
+@synthesize answeredFlag;
+@synthesize flaggedFlag;
+@synthesize deletedFlag;
+@synthesize draftFlag;
+@synthesize flags;
 
 - (id)initWithURL:(NSURL*)fileURL {
 	self = [super init];
@@ -33,19 +46,50 @@
 
 - (void)dealloc {
     
-    [uuid release];
-    [messageId release];
-    [messageURL release];
-    [messageBody release];
-    [subject release];
-    [sender release];
-    [to release];
-    [receivedDate release];
-    [sendDate release];
-	[mimePart release];
+    LBRelease(localUUID);
+    LBRelease(serverUID);
+    LBRelease(messageId);
+    LBRelease(inReplyTo);
+    LBRelease(mailbox);
+    LBRelease(subject);
+    LBRelease(sender);
+    LBRelease(to);
+    LBRelease(messageBody);
+    LBRelease(messageURL);
+    LBRelease(receivedDate);
+    LBRelease(sendDate);
+    LBRelease(flags);
+    LBRelease(mimePart);
     
     [super dealloc];
 }
+
+
+- (id)copyWithZone:(NSZone*)zone {
+    
+    LBMessage *m    = [[[self class] alloc] init];
+    
+    m->localUUID    = [[self localUUID] copy];
+    m->serverUID    = [[self serverUID] copy];
+    m->messageId    = [[self messageId] copy];
+    m->inReplyTo    = [[self inReplyTo] copy];
+    m->mailbox      = [[self mailbox] copy];
+    m->subject      = [[self subject] copy];
+    m->sender       = [[self sender] copy];
+    m->to           = [[self to] copy];
+    m->messageBody  = [[self messageBody] copy];
+    m->messageURL   = [[self messageURL] copy];
+    m->receivedDate = [[self receivedDate] copy];
+    m->sendDate     = [[self sendDate] copy];
+    m->flags        = [[self flags] copy];
+    
+    return m;
+}
+
+- (id) copy {
+    return [self copyWithZone:nil];
+}
+
 
 - (void) parseHeaders {
     

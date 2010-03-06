@@ -9,106 +9,31 @@
 #import "LBIMAPConnectionTests.h"
 #import "LBIMAPConnection.h"
 #import "LBAccount.h"
+#import "LBTestIMAPServer.h"
 
 #define debug NSLog
 
-#define LBTestError(err, reason) { if (err) {   NSLog(@"err: %@", err);\
-                                                failed = YES;\
-                                                failReason = reason;\
-                                                waitForFinish = NO;\
-                                                return; } }
-
-#define LBAssertTrue(b, reason) { if (!(b)) {   failed = YES;\
-                                                failReason = reason;\
-                                                waitForFinish = NO;\
-                                                return; } }
-
-#define LBInitTest() __block BOOL failed            = NO;\
-                     __block NSString *failReason   = nil;\
-                     __block BOOL waitForFinish     = YES;\
-                     __block NSTask *serverTask     = nil;
-                     
-
-#define LBInitTestWithServerScript(script)  LBInitTest()\
-                                            dispatch_sync(dispatch_get_main_queue(),^ {\
-                                                serverTask = [[self runServerScript:script] retain];\
-                                            });
-
-#define LBEndTest() waitForFinish = NO;
-
-#define LBWaitForFinish() { while (waitForFinish) { sleep(.1); } [serverTask terminate]; [serverTask release]; GHAssertFalse(failed, failReason); }
 
 @implementation LBIMAPConnectionTests
 
-- (LBAccount*)atestAccount {
-    
-    LBAccount *acct = [[[LBAccount alloc] init] autorelease];
-    [acct setUsername:@"user"];
-    [acct setPassword:@"password"];
-    [acct setImapServer:@"localhost"];
-    [acct setImapPort:1430];
-    [acct setIsActive:YES];
-    [acct setImapTLS:NO];
-    
-    return acct;
-}
-
-- (LBAccount*)realAccount {
-    
-    // oh what to do here?
-    LBAccount *acct = [[[LBAccount alloc] init] autorelease];
-    [acct setUsername:@"gus"];
-    [acct setPassword:@"password"];
-    [acct setImapServer:@"ubuntu.local"];
-    [acct setImapPort:143];
-    [acct setIsActive:YES];
-    [acct setImapTLS:NO];
-    
-    return acct;
-}
-
-
-
-- (NSTask*)runServerScript:(NSString*)scriptName {
-    
-    system("killall python");
-    
-    NSString *myFilePath = [NSString stringWithUTF8String:__FILE__];
-    
-    NSString *parentDir = [[myFilePath stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
-    
-    NSString *testDir   = [[parentDir stringByAppendingPathComponent:@"tests"] stringByAppendingPathComponent:@"LBIMAPConnectionTests"];
-    
-    NSString *taskPath  = [testDir stringByAppendingPathComponent:scriptName];
-    
-    NSTask *task = [[NSTask alloc] init];
-    
-    [task setLaunchPath:taskPath];
-    
-    [task launch];
-    
-    // wait a sec for it to startup
-    sleep(1);
-    
-    debug(@"task: %@", task);
-    
-    return task;
-}
-
 - (void)testLoginLogout {
     
-    LBInitTestWithServerScript(@"testLoginLogout.py");
+    [[LBTestIMAPServer sharedIMAPServer] runScript:@"testLoginLogout.plist"];
+    
+    LBInitTest();
     
     // this needs to run on the main loop
     dispatch_async(dispatch_get_main_queue(),^ {
         
-        LBIMAPConnection *conn = [[[LBIMAPConnection alloc] initWithAccount:[self atestAccount]] autorelease];
+        LBIMAPConnection *conn = [[[LBIMAPConnection alloc] initWithAccount:[LBTestIMAPServer testAccount]] autorelease];
         
         [conn connectUsingBlock:^(NSError *err) {
             
             LBTestError(err, @"Got an error trying to connect!");
             
             [conn logoutWithBlock:^(NSError *err) {
+                
+                debug(@"logged out!");
                 
                 LBTestError(err, @"Got an error trying to log out!");
                 
@@ -123,11 +48,13 @@
 }
 - (void)testLoginFail {
     
-    LBInitTestWithServerScript(@"testLoginFail.py");
+    [[LBTestIMAPServer sharedIMAPServer] runScript:@"testLoginFail.plist"];
+    
+    LBInitTest();
     
     dispatch_async(dispatch_get_main_queue(),^ {
         
-        LBIMAPConnection *conn = [[[LBIMAPConnection alloc] initWithAccount:[self atestAccount]] autorelease];
+        LBIMAPConnection *conn = [[[LBIMAPConnection alloc] initWithAccount:[LBTestIMAPServer testAccount]] autorelease];
         
         [conn connectUsingBlock:^(NSError *err) {
             
@@ -147,14 +74,17 @@
     LBWaitForFinish();
 }
 
-- (void)testDeleteAndExpunge {
+
+- (void)testMobileMeSelect {
     
-    LBInitTestWithServerScript(@"testDeleteAndExpunge.py");
+    [[LBTestIMAPServer sharedIMAPServer] runScript:@"testMobileMeSelect.plist"];
+    
+    LBInitTest();
     
     // this needs to run on the main loop
     dispatch_async(dispatch_get_main_queue(),^ {
         
-        LBAccount *account      = [self atestAccount];
+        LBAccount *account      = [LBTestIMAPServer testAccount];
         LBIMAPConnection *conn  = [[[LBIMAPConnection alloc] initWithAccount:account] autorelease];
         
         conn.debugOutput = YES;
@@ -167,6 +97,48 @@
                 
                 LBTestError(err, @"Got an error trying to login!");
                 
+                [conn selectMailbox:@"Mailbox With Spaces" block:^(NSError *err) {
+                    
+                    LBTestError(err, @"Got an error trying to select!");
+                    
+                    [conn logoutWithBlock:^(NSError *err) {
+                        
+                        LBTestError(err, @"Got an error trying to log out!");
+                        
+                        [conn close];
+                        
+                        LBEndTest();
+                    }];
+                }];
+            }];
+        }];
+    });
+    
+    LBWaitForFinish();
+}
+
+- (void)testDeleteAndExpunge {
+    
+    [[LBTestIMAPServer sharedIMAPServer] runScript:@"testDeleteAndExpunge.plist"];
+    
+    LBInitTest();
+    
+    
+    // this needs to run on the main loop
+    dispatch_async(dispatch_get_main_queue(),^ {
+        
+        LBAccount *account      = [LBTestIMAPServer testAccount];
+        LBIMAPConnection *conn  = [[[LBIMAPConnection alloc] initWithAccount:account] autorelease];
+        
+        conn.debugOutput = YES;
+        
+        [conn connectUsingBlock:^(NSError *err) {
+            
+            LBTestError(err, @"Got an error trying to connect!");
+            
+            [conn loginWithBlock:^(NSError *err) {
+                
+                LBTestError(err, @"Got an error trying to login!");
                 
                 [conn selectMailbox:@"INBOX" block:^(NSError *err) {
                     
@@ -194,14 +166,23 @@
     LBWaitForFinish();
 }
 
+
+
+
+
+
+
 - (void)testListSubscriptions {
     
-    LBInitTestWithServerScript(@"testListSubscriptions.py");
+    
+    [[LBTestIMAPServer sharedIMAPServer] runScript:@"testListSubscriptions.plist"];
+    
+    LBInitTest();
     
     // this needs to run on the main loop
     dispatch_async(dispatch_get_main_queue(),^ {
         
-        LBAccount *account      = [self atestAccount];
+        LBAccount *account      = [LBTestIMAPServer testAccount];
         LBIMAPConnection *conn  = [[[LBIMAPConnection alloc] initWithAccount:account] autorelease];
         
         [conn connectUsingBlock:^(NSError *err) {
@@ -247,11 +228,41 @@
     LBWaitForFinish();
 }
 
-
-
-
-
-
-
+- (void)testBadLSUB {
+    
+    [[LBTestIMAPServer sharedIMAPServer] runScript:@"testBadLSUB.plist"];
+    
+    LBInitTest();
+    
+    dispatch_async(dispatch_get_main_queue(),^ {
+        
+        LBAccount *account      = [LBTestIMAPServer testAccount];
+        LBIMAPConnection *conn  = [[[LBIMAPConnection alloc] initWithAccount:account] autorelease];
+        
+        [conn connectUsingBlock:^(NSError *err) {
+            
+            LBTestError(err, @"Got an error trying to connect!");
+            
+            [conn loginWithBlock:^(NSError *err) {
+                LBTestError(err, @"Got an error trying to login!");
+                
+                [conn listSubscribedMailboxesWithBock:^(NSError *err) {
+                    LBAssertTrue(err != nil, @"Should have gotten an error!");
+                    
+                    [conn logoutWithBlock:^(NSError *err) {
+                        
+                        LBTestError(err, @"Got an error trying to log out!");
+                        
+                        [conn close];
+                        
+                        LBEndTest();
+                    }];
+                }];
+            }];
+        }];
+    });
+    
+    LBWaitForFinish();
+}
 
 @end
