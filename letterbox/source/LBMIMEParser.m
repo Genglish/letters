@@ -496,6 +496,8 @@ NSString *LBMIMEStringByDecodingStringFromEncodingWithCharSet( NSString *inputSt
 		} else if ( [characterSet isCaseInsensitiveLike:@"ISO-8859-15"] ) {
 			// FIXME : jasonrm - Is this even allowed? From lists of encodings 15 looks to match ISO-8859-15 but I don't like hardcoding a number here.
 			decodedString = [decodedString stringByReplacingPercentEscapesUsingEncoding:15];
+		} else if ( [characterSet isCaseInsensitiveLike:@"US-ASCII"] ){
+			decodedString = [decodedString stringByReplacingPercentEscapesUsingEncoding:NSASCIIStringEncoding];
 		} else {
 			// FIXME : jasonrm - Only the most common (for someone in the US) encodings are supported, everything else is treated like ISO-8859-1
 			decodedString = [decodedString stringByReplacingPercentEscapesUsingEncoding:NSISOLatin1StringEncoding];

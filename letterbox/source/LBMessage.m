@@ -90,6 +90,8 @@
 			fullMessage = [err localizedDescription];
 		}
 		
+		NSLog( @"URL: %@", messageURL );
+		
 		mimePart = [[LBMIMEMultipartMessage alloc] initWithString: fullMessage];
 		NSLog( @"%@", mimePart.contentType );
 		for ( LBMIMEPart *part in mimePart.subparts )
