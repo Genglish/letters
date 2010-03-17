@@ -280,7 +280,7 @@ typedef enum
 					
 					[lines removeAllObjects];
 					
-					if ( [string isEqual: [NSString stringWithFormat: @"--%@--"]] )
+					if ( [string isEqual: [NSString stringWithFormat: @"--%@--", boundary]] )
 					{
 						state = LBMIMEParserStateFinishedReadingParts;
 					}
